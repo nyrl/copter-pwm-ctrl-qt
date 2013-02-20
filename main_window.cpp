@@ -201,8 +201,8 @@ MainWindow::MainWindow(QWidget* _parent)
   QSharedPointer<CopterMotor> my1(new CopterMotor(s_ctrl_path_y1, m_ui->motor_y1));
   QSharedPointer<CopterMotor> my2(new CopterMotor(s_ctrl_path_y2, m_ui->motor_y2));
 
-  QSharedPointer<CopterAxis>  m_axisX(new CopterAxis(mx1, mx2));
-  QSharedPointer<CopterAxis>  m_axisY(new CopterAxis(my1, my2));
+  QSharedPointer<CopterAxis>  m_axisX(new CopterAxis(mx2, mx1));
+  QSharedPointer<CopterAxis>  m_axisY(new CopterAxis(my2, my1));
   m_copterCtrl = new CopterCtrl(m_axisX, m_axisY, m_ui->motor_all);
 
   m_tcpServer.listen(QHostAddress::Any, s_tcp_port);
