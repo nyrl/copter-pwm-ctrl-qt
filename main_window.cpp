@@ -25,7 +25,7 @@ static QString s_ctrl_path_x1("/sys/devices/platform/ehrpwm.0/pwm/ehrpwm.0:0/dut
 static QString s_ctrl_path_x2("/sys/devices/platform/ehrpwm.0/pwm/ehrpwm.0:1/duty_percent");
 static QString s_ctrl_path_y1("/sys/devices/platform/ehrpwm.1/pwm/ehrpwm.1:0/duty_percent");
 static QString s_ctrl_path_y2("/sys/devices/platform/ehrpwm.1/pwm/ehrpwm.1:1/duty_percent");
-static QString s_accel_input_path("/dev/input/event0");
+static QString s_accel_input_path("/dev/copter_accel");
 
 static unsigned s_tcp_port = 4000;
 
