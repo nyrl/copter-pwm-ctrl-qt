@@ -97,12 +97,13 @@ class MainWindow : public QMainWindow
     QPointer<CopterCtrl> m_copterCtrl;
     QTcpServer           m_tcpServer;
     QPointer<QTcpSocket> m_tcpConnection;
-    int                  m_accelerometerCtrlFd;
     int                  m_accelerometerInputFd;
     QPointer<QSocketNotifier> m_accelerometerInputNotifier;
 
-    void handleTiltX(double _tilt);
-    void handleTiltY(double _tilt);
+    void handleTiltX();
+    void handleTiltY();
+    double m_nextTiltX;
+    double m_nextTiltY;
     double m_lastTiltX;
     double m_lastTiltY;
 

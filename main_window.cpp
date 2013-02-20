@@ -21,18 +21,24 @@
 #define MMA7660FC_IOCTL_S_POLL_DELAY	_IOW(MMAIO, 0x03, int)
 
 
-static const QString s_ctrl_path("/sys/devices/platform/");
-static const QString s_accel_input_path("/dev/input/event0");
-static const QString s_accel_ctrl_path("/dev/accel_ctrl");
-static const unsigned s_tcp_port = 4000;
+static QString s_ctrl_path_x1("/sys/devices/platform/ehrpwm.0/pwm/ehrpwm.0:0/duty_percent");
+static QString s_ctrl_path_x2("/sys/devices/platform/ehrpwm.0/pwm/ehrpwm.0:1/duty_percent");
+static QString s_ctrl_path_y1("/sys/devices/platform/ehrpwm.1/pwm/ehrpwm.1:0/duty_percent");
+static QString s_ctrl_path_y2("/sys/devices/platform/ehrpwm.1/pwm/ehrpwm.1:1/duty_percent");
+static QString s_accel_input_path("/dev/input/event0");
 
-static const double s_tilt_step = 0.02;
-static const double s_power_step1 = 1;
-static const double s_power_step2 = 5;
-static const int s_power_min = 0;
-static const int s_power_max = 100;
-static const double s_accel_linear = -0.02;
-static const double s_accel_derivative = -0.005;
+static unsigned s_tcp_port = 4000;
+
+static double s_tilt_step = 0.02;
+static double s_power_step1 = 1;
+static double s_power_step2 = 5;
+static int s_power_min = 0;
+static int s_power_max = 100;
+static int s_motor_min = 48;
+static int s_motor_max = 72;
+
+static double s_accel_linear = -0.02;
+static double s_accel_derivative = -0.005;
 
 
 
@@ -51,7 +57,9 @@ void CopterMotor::invoke(int _power)
 {
   QString s;
   m_ctrlFile.open(QIODevice::WriteOnly|QIODevice::Truncate|QIODevice::Unbuffered|QIODevice::Text);
-  s.sprintf("%d\n", _power);
+  double powerFactor = static_cast<double>(s_motor_max - s_motor_min) / static_cast<double>(s_power_max - s_power_min);
+  double power = s_motor_min + static_cast<double>(_power - s_power_min) * powerFactor;
+  s.sprintf("%d\n", static_cast<int>(power));
   m_ctrlFile.write(s.toAscii().data());
   m_ctrlFile.close();
 }
@@ -179,32 +187,26 @@ MainWindow::MainWindow(QWidget* _parent)
   m_copterCtrl(),
   m_tcpServer(),
   m_tcpConnection(),
-  m_accelerometerCtrlFd(-1),
   m_accelerometerInputFd(-1),
   m_accelerometerInputNotifier(0),
+  m_nextTiltX(0),
+  m_nextTiltY(0),
   m_lastTiltX(0),
   m_lastTiltY(0)
 {
   m_ui->setupUi(this);
 
-  QSharedPointer<CopterMotor> mx1(new CopterMotor(s_ctrl_path+"ehrpwm.0/pwm/ehrpwm.0:0/duty_percent", m_ui->motor_x1));
-  QSharedPointer<CopterMotor> mx2(new CopterMotor(s_ctrl_path+"ehrpwm.0/pwm/ehrpwm.0:1/duty_percent", m_ui->motor_x2));
-  QSharedPointer<CopterMotor> my1(new CopterMotor(s_ctrl_path+"ehrpwm.1/pwm/ehrpwm.1:0/duty_percent", m_ui->motor_y1));
-  QSharedPointer<CopterMotor> my2(new CopterMotor(s_ctrl_path+"ehrpwm.1/pwm/ehrpwm.1:1/duty_percent", m_ui->motor_y2));
+  QSharedPointer<CopterMotor> mx1(new CopterMotor(s_ctrl_path_x1, m_ui->motor_x1));
+  QSharedPointer<CopterMotor> mx2(new CopterMotor(s_ctrl_path_x2, m_ui->motor_x2));
+  QSharedPointer<CopterMotor> my1(new CopterMotor(s_ctrl_path_y1, m_ui->motor_y1));
+  QSharedPointer<CopterMotor> my2(new CopterMotor(s_ctrl_path_y2, m_ui->motor_y2));
+
   QSharedPointer<CopterAxis>  m_axisX(new CopterAxis(mx1, mx2));
   QSharedPointer<CopterAxis>  m_axisY(new CopterAxis(my1, my2));
   m_copterCtrl = new CopterCtrl(m_axisX, m_axisY, m_ui->motor_all);
 
   m_tcpServer.listen(QHostAddress::Any, s_tcp_port);
   connect(&m_tcpServer, SIGNAL(newConnection()), this, SLOT(onConnection()));
-
-  m_accelerometerCtrlFd = open(s_accel_ctrl_path.toAscii().data(), O_SYNC, O_RDWR);
-  if (m_accelerometerCtrlFd == -1)
-    qDebug() << "Cannot open accelerometer ctrl file " << s_accel_ctrl_path << ", reason: " << errno;
-
-  int delay_ms = 20;
-  if (ioctl(m_accelerometerCtrlFd, MMA7660FC_IOCTL_S_POLL_DELAY, &delay_ms) != 0)
-    qDebug() << "Cannot set poll delay to accelerometer ctrl file, reason: " << errno;
 
   m_accelerometerInputFd = open(s_accel_input_path.toAscii().data(), O_SYNC, O_RDONLY);
   if (m_accelerometerInputFd == -1)
@@ -264,6 +266,23 @@ void MainWindow::onNetworkRead()
       case 'c': m_copterCtrl->adjustPower(+s_power_step1); break;
       case 'v': m_copterCtrl->adjustPower(+s_power_step2); break;
       case 'V': m_copterCtrl->adjustPower(+s_power_max); break;
+
+      case '(': s_tilt_step *= 0.9; break;
+      case ')': s_tilt_step /= 0.9; break;
+      case '[': s_accel_linear *= 0.9; break;
+      case ']': s_accel_linear /= 0.9; break;
+      case '{': s_accel_derivative *= 0.9; break;
+      case '}': s_accel_derivative /= 0.9; break;
+    }
+
+    if (!m_tcpConnection.isNull())
+    {
+      QString buf;
+      buf.sprintf("accel linear %f, derivative %f, tilt step %f\n"
+                  "last x=%i, y=%i\n",
+                  static_cast<double>(s_accel_linear), static_cast<double>(s_accel_derivative), static_cast<double>(s_tilt_step),
+                  static_cast<int>(m_nextTiltX), static_cast<int>(m_nextTiltY));
+      m_tcpConnection->write(buf.toAscii());
     }
   }
 }
@@ -278,40 +297,36 @@ void MainWindow::onAccelerometerRead()
     return;
   }
 
-  if (evt.type != EV_ABS)
+  switch (evt.type)
   {
-    if (evt.type != EV_SYN)
-      qDebug() << "Input event type is not EV_ABS or EV_SYN: " << evt.type;
-    return;
-  }
+    case EV_ABS:
+      switch (evt.code)
+      {
+        case ABS_X: m_nextTiltX = evt.value; break;
+        case ABS_Y: m_nextTiltY = evt.value; break;
+      }
+      break;
 
-  char code = 0;
-  switch (evt.code)
-  {
-    case ABS_X: code = 'x'; handleTiltX(evt.value); break;
-    case ABS_Y: code = 'y'; handleTiltY(evt.value); break;
-    case ABS_Z: code = 'z'; break;
-  }
-  if (code == 0 || m_tcpConnection.isNull())
-    return;
+    case EV_SYN:
+      handleTiltX();
+      handleTiltY();
 
-  QString buf;
-  buf.sprintf("%c%i ", code, static_cast<int>(evt.value));
-  m_tcpConnection->write(buf.toAscii());
+      break;
+  }
 }
 
-void MainWindow::handleTiltX(double _tilt)
+void MainWindow::handleTiltX()
 {
-  double adj = s_accel_linear*_tilt + s_accel_derivative*(_tilt - m_lastTiltX);
+  double adj = s_accel_linear*m_nextTiltX + s_accel_derivative*(m_nextTiltX - m_lastTiltX);
   m_copterCtrl->adjustTilt(adj, 0);
-  m_lastTiltX = _tilt;
+  m_lastTiltX = m_nextTiltX;
 }
 
-void MainWindow::handleTiltY(double _tilt)
+void MainWindow::handleTiltY()
 {
-  double adj = s_accel_linear*_tilt + s_accel_derivative*(_tilt - m_lastTiltY);
+  double adj = s_accel_linear*m_nextTiltY + s_accel_derivative*(m_nextTiltY - m_lastTiltY);
   m_copterCtrl->adjustTilt(0, adj);
-  m_lastTiltY = _tilt;
+  m_lastTiltY = m_nextTiltX;
 }
 
 
