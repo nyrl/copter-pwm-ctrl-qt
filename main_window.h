@@ -11,6 +11,7 @@
 #include <QtNetwork/QTcpSocket>
 #include <QLCDNumber>
 #include <QString>
+#include <QVector>
 #include <QFile>
 #include "ui_main_window.h"
 
@@ -102,12 +103,17 @@ class MainWindow : public QMainWindow
 
     void handleTilt();
 
+    static double updateHistory(QVector<double>& _history, double _newValue);
+
     double m_nextTiltX;
     double m_nextTiltY;
     double m_nextTiltZ;
     double m_lastTiltX;
     double m_lastTiltY;
     double m_lastTiltZ;
+
+    QVector<double> m_historyX;
+    QVector<double> m_historyY;
 
   protected slots:
     void onConnection();

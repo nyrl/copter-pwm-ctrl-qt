@@ -196,7 +196,9 @@ MainWindow::MainWindow(QWidget* _parent)
   m_nextTiltZ(0),
   m_lastTiltX(0),
   m_lastTiltY(0),
-  m_lastTiltZ(0)
+  m_lastTiltZ(0),
+  m_historyX(10, 0.0),
+  m_historyY(10, 0.0)
 {
   m_ui->setupUi(this);
 
@@ -332,8 +334,23 @@ void MainWindow::onAccelerometerRead()
   }
 }
 
+
+double MainWindow::updateHistory(QVector<double>& _history, double _newValue)
+{
+  _history.erase(_history.begin());
+  _history.push_back(_newValue);
+
+  double sum = 0;
+  for (QVector<double>::const_iterator it(_history.begin()); it != _history.end(); ++it)
+    sum += *it;
+  return sum / _history.size();
+}
+
 void MainWindow::handleTilt()
 {
+  m_nextTiltX = updateHistory(m_historyX, m_nextTiltX);
+  m_nextTiltY = updateHistory(m_historyY, m_nextTiltY);
+
   double adjX = s_accel_linear*m_nextTiltX + s_accel_derivative*(m_nextTiltX - m_lastTiltX);
   double adjY = s_accel_linear*m_nextTiltY + s_accel_derivative*(m_nextTiltY - m_lastTiltY);
 
