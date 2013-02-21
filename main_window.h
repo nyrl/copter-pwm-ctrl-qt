@@ -105,12 +105,12 @@ class MainWindow : public QMainWindow
 
     static double updateHistory(QVector<double>& _history, double _newValue);
 
-    double m_nextTiltX;
-    double m_nextTiltY;
-    double m_nextTiltZ;
-    double m_lastTiltX;
-    double m_lastTiltY;
-    double m_lastTiltZ;
+    double m_tiltX;
+    double m_tiltY;
+    double m_tiltZ;
+
+    double m_lastAvgX;
+    double m_lastAvgY;
 
     QVector<double> m_historyX;
     QVector<double> m_historyY;

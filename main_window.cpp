@@ -191,12 +191,11 @@ MainWindow::MainWindow(QWidget* _parent)
   m_tcpConnection(),
   m_accelerometerInputFd(-1),
   m_accelerometerInputNotifier(0),
-  m_nextTiltX(0),
-  m_nextTiltY(0),
-  m_nextTiltZ(0),
-  m_lastTiltX(0),
-  m_lastTiltY(0),
-  m_lastTiltZ(0),
+  m_tiltX(0),
+  m_tiltY(0),
+  m_tiltZ(0),
+  m_lastAvgX(0),
+  m_lastAvgY(0),
   m_historyX(10, 0.0),
   m_historyY(10, 0.0)
 {
@@ -284,15 +283,12 @@ void MainWindow::onNetworkRead()
       case 'i': s_report_accel_data = false; break;
     }
 
-    if (!m_tcpConnection.isNull())
-    {
-      QString buf;
-      buf.sprintf("accel linear %f, derivative %f, tilt step %f\r\n"
-                  "last x=%i, y=%i\r\n",
-                  static_cast<double>(s_accel_linear), static_cast<double>(s_accel_derivative), static_cast<double>(s_tilt_step),
-                  static_cast<int>(m_nextTiltX), static_cast<int>(m_nextTiltY));
-      m_tcpConnection->write(buf.toAscii());
-    }
+    QString buf;
+    buf.sprintf("accel linear %f, derivative %f, tilt step %f\r\n"
+                "last average x %f, y %f\r\n",
+                static_cast<double>(s_accel_linear), static_cast<double>(s_accel_derivative), static_cast<double>(s_tilt_step),
+                static_cast<double>(m_lastAvgX), static_cast<double>(m_lastAvgY));
+    m_tcpConnection->write(buf.toAscii());
   }
 }
 
@@ -311,9 +307,9 @@ void MainWindow::onAccelerometerRead()
     case EV_ABS:
       switch (evt.code)
       {
-        case ABS_X: m_nextTiltX = evt.value; break;
-        case ABS_Y: m_nextTiltY = evt.value; break;
-        case ABS_Z: m_nextTiltZ = evt.value; break;
+        case ABS_X: m_tiltX = evt.value; break;
+        case ABS_Y: m_tiltY = evt.value; break;
+        case ABS_Z: m_tiltZ = evt.value; break;
       }
       break;
 
@@ -323,10 +319,12 @@ void MainWindow::onAccelerometerRead()
       if (s_report_accel_data && !m_tcpConnection.isNull())
       {
         QString buf;
-        buf.sprintf("ACCEL %i %i %i ",
-                    static_cast<int>(m_nextTiltX),
-                    static_cast<int>(m_nextTiltY),
-                    static_cast<int>(m_nextTiltZ));
+        buf.sprintf("ACCEL %i %i %i AVG %i %i\r\n",
+                    static_cast<int>(m_tiltX),
+                    static_cast<int>(m_tiltY),
+                    static_cast<int>(m_tiltZ),
+                    static_cast<int>(m_lastAvgX),
+                    static_cast<int>(m_lastAvgY));
         m_tcpConnection->write(buf.toAscii());
       }
 
@@ -343,22 +341,22 @@ double MainWindow::updateHistory(QVector<double>& _history, double _newValue)
   double sum = 0;
   for (QVector<double>::const_iterator it(_history.begin()); it != _history.end(); ++it)
     sum += *it;
+
   return sum / _history.size();
 }
 
 void MainWindow::handleTilt()
 {
-  m_nextTiltX = updateHistory(m_historyX, m_nextTiltX);
-  m_nextTiltY = updateHistory(m_historyY, m_nextTiltY);
+  double nextAvgX = updateHistory(m_historyX, m_tiltX);
+  double nextAvgY = updateHistory(m_historyX, m_tiltX);
 
-  double adjX = s_accel_linear*m_nextTiltX + s_accel_derivative*(m_nextTiltX - m_lastTiltX);
-  double adjY = s_accel_linear*m_nextTiltY + s_accel_derivative*(m_nextTiltY - m_lastTiltY);
+  const double adjX = s_accel_linear*nextAvgX + s_accel_derivative*(nextAvgX - m_lastAvgX);
+  const double adjY = s_accel_linear*nextAvgY + s_accel_derivative*(nextAvgY - m_lastAvgY);
 
   m_copterCtrl->adjustTilt(adjX, adjY);
 
-  m_lastTiltX = m_nextTiltX;
-  m_lastTiltY = m_nextTiltY;
-  m_lastTiltZ = m_nextTiltZ;
+  m_lastAvgX = nextAvgX;
+  m_lastAvgY = nextAvgY;
 }
 
 
