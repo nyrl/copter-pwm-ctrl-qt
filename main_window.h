@@ -112,6 +112,9 @@ class MainWindow : public QMainWindow
     double m_lastAvgX;
     double m_lastAvgY;
 
+    double m_normalAvgX;
+    double m_normalAvgY;
+
     QVector<double> m_historyX;
     QVector<double> m_historyY;
 

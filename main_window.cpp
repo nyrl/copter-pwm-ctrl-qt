@@ -196,6 +196,8 @@ MainWindow::MainWindow(QWidget* _parent)
   m_tiltZ(0),
   m_lastAvgX(0),
   m_lastAvgY(0),
+  m_normalAvgX(0.0),
+  m_normalAvgY(0.0),
   m_historyX(10, 0.0),
   m_historyY(10, 0.0)
 {
@@ -279,15 +281,37 @@ void MainWindow::onNetworkRead()
       case '{': s_accel_derivative *= 0.9; break;
       case '}': s_accel_derivative /= 0.9; break;
 
+      case '<':
+                if (m_historyX.size() > 1)
+                  m_historyX.pop_front();
+                if (m_historyY.size() > 1)
+                  m_historyY.pop_front();
+                break;
+      case '>':
+                m_historyX.push_front(0.0);
+                m_historyY.push_front(0.0);
+                break;
+
+      case '_':
+                m_normalAvgX = m_lastAvgX;
+                m_normalAvgY = m_lastAvgY;
+                break;
+
       case 'I': s_report_accel_data = true; break;
       case 'i': s_report_accel_data = false; break;
     }
 
     QString buf;
-    buf.sprintf("accel linear %f, derivative %f, tilt step %f\r\n"
-                "last average x %f, y %f\r\n",
-                static_cast<double>(s_accel_linear), static_cast<double>(s_accel_derivative), static_cast<double>(s_tilt_step),
-                static_cast<double>(m_lastAvgX), static_cast<double>(m_lastAvgY));
+    buf.sprintf("accel linear %f, derivative %f, tilt step %f, filter size %i/%i\r\n"
+                "last average x %f, y %f; normal x %f, y %f\r\n",
+                static_cast<double>(s_accel_linear),
+                static_cast<double>(s_accel_derivative),
+                static_cast<double>(s_tilt_step),
+                static_cast<int>(m_historyX.size()), static_cast<int>(m_historyY.size()),
+                static_cast<double>(m_lastAvgX),
+                static_cast<double>(m_lastAvgY),
+                static_cast<double>(m_normalAvgX),
+                static_cast<double>(m_normalAvgY));
     m_tcpConnection->write(buf.toAscii());
   }
 }
@@ -350,8 +374,8 @@ void MainWindow::handleTilt()
   double nextAvgX = updateHistory(m_historyX, m_tiltX);
   double nextAvgY = updateHistory(m_historyX, m_tiltX);
 
-  const double adjX = s_accel_linear*nextAvgX + s_accel_derivative*(nextAvgX - m_lastAvgX);
-  const double adjY = s_accel_linear*nextAvgY + s_accel_derivative*(nextAvgY - m_lastAvgY);
+  const double adjX = s_accel_linear*(nextAvgX - m_normalAvgX) + s_accel_derivative*(nextAvgX - m_lastAvgX);
+  const double adjY = s_accel_linear*(nextAvgY - m_normalAvgY) + s_accel_derivative*(nextAvgY - m_lastAvgY);
 
   m_copterCtrl->adjustTilt(adjX, adjY);
 
