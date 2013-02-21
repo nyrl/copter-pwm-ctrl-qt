@@ -40,6 +40,8 @@ static int s_motor_max = 72;
 static double s_accel_linear = -0.02;
 static double s_accel_derivative = -0.005;
 
+static bool s_report_accel_data = false;
+
 
 
 
@@ -191,8 +193,10 @@ MainWindow::MainWindow(QWidget* _parent)
   m_accelerometerInputNotifier(0),
   m_nextTiltX(0),
   m_nextTiltY(0),
+  m_nextTiltZ(0),
   m_lastTiltX(0),
-  m_lastTiltY(0)
+  m_lastTiltY(0),
+  m_lastTiltZ(0)
 {
   m_ui->setupUi(this);
 
@@ -273,13 +277,16 @@ void MainWindow::onNetworkRead()
       case ']': s_accel_linear /= 0.9; break;
       case '{': s_accel_derivative *= 0.9; break;
       case '}': s_accel_derivative /= 0.9; break;
+
+      case 'I': s_report_accel_data = true; break;
+      case 'i': s_report_accel_data = false; break;
     }
 
     if (!m_tcpConnection.isNull())
     {
       QString buf;
-      buf.sprintf("accel linear %f, derivative %f, tilt step %f\n"
-                  "last x=%i, y=%i\n",
+      buf.sprintf("accel linear %f, derivative %f, tilt step %f\r\n"
+                  "last x=%i, y=%i\r\n",
                   static_cast<double>(s_accel_linear), static_cast<double>(s_accel_derivative), static_cast<double>(s_tilt_step),
                   static_cast<int>(m_nextTiltX), static_cast<int>(m_nextTiltY));
       m_tcpConnection->write(buf.toAscii());
@@ -304,30 +311,37 @@ void MainWindow::onAccelerometerRead()
       {
         case ABS_X: m_nextTiltX = evt.value; break;
         case ABS_Y: m_nextTiltY = evt.value; break;
+        case ABS_Z: m_nextTiltZ = evt.value; break;
       }
       break;
 
     case EV_SYN:
-      handleTiltX();
-      handleTiltY();
+      handleTilt();
+
+      if (s_report_accel_data && !m_tcpConnection.isNull())
+      {
+        QString buf;
+        buf.sprintf("ACCEL %i %i %i ",
+                    static_cast<int>(m_nextTiltX),
+                    static_cast<int>(m_nextTiltY),
+                    static_cast<int>(m_nextTiltZ));
+        m_tcpConnection->write(buf.toAscii());
+      }
 
       break;
   }
 }
 
-void MainWindow::handleTiltX()
+void MainWindow::handleTilt()
 {
-  double adj = s_accel_linear*m_nextTiltX + s_accel_derivative*(m_nextTiltX - m_lastTiltX);
-  m_copterCtrl->adjustTilt(adj, 0);
+  double adjX = s_accel_linear*m_nextTiltX + s_accel_derivative*(m_nextTiltX - m_lastTiltX);
+  double adjY = s_accel_linear*m_nextTiltY + s_accel_derivative*(m_nextTiltY - m_lastTiltY);
+
+  m_copterCtrl->adjustTilt(adjX, adjY);
+
   m_lastTiltX = m_nextTiltX;
+  m_lastTiltY = m_nextTiltY;
+  m_lastTiltZ = m_nextTiltZ;
 }
-
-void MainWindow::handleTiltY()
-{
-  double adj = s_accel_linear*m_nextTiltY + s_accel_derivative*(m_nextTiltY - m_lastTiltY);
-  m_copterCtrl->adjustTilt(0, adj);
-  m_lastTiltY = m_nextTiltX;
-}
-
 
 

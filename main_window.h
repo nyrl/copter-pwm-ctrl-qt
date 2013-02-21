@@ -100,12 +100,14 @@ class MainWindow : public QMainWindow
     int                  m_accelerometerInputFd;
     QPointer<QSocketNotifier> m_accelerometerInputNotifier;
 
-    void handleTiltX();
-    void handleTiltY();
+    void handleTilt();
+
     double m_nextTiltX;
     double m_nextTiltY;
+    double m_nextTiltZ;
     double m_lastTiltX;
     double m_lastTiltY;
+    double m_lastTiltZ;
 
   protected slots:
     void onConnection();
